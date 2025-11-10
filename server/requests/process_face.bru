@@ -1,0 +1,21 @@
+meta {
+  name: process_face
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/face/process
+  body: multipartForm
+  auth: inherit
+}
+
+body:multipart-form {
+  cam_index: 0
+  image: @file()
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
