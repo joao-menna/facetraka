@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en-US">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>TicTacToe - Gate</title>
+    <style>
+      body {
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 20px;
+      }
+      h1 {
+        margin-bottom: 8px;
+      }
+      #board {
+        display: grid;
+        grid-template-columns: repeat(3, 100px);
+        grid-template-rows: repeat(3, 100px);
+        gap: 8px;
+      }
+      .cell {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 40px;
+        background: #f3f3f3;
+        border-radius: 8px;
+        cursor: pointer;
+        user-select: none;
+      }
+      .disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        pointer-events: none;
+      }
+      #controls {
+        margin-top: 16px;
+        display: flex;
+        gap: 8px;
+      }
+      button {
+        padding: 8px 12px;
+        border-radius: 6px;
+        border: 1px solid #ccc;
+        background: white;
+        cursor: pointer;
+      }
+      #log {
+        margin-top: 14px;
+        min-height: 40px;
+        max-width: 340px;
+        text-align: center;
+      }
+      #status {
+        margin-top: 10px;
+      }
+      #names {
+        display: flex;
+        gap: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>TicTacToe (Catraka)</h1>
+
+    <div id="board"></div>
+
+    <div id="controls">
+      <button id="connectBtn">Connect (WebSocket)</button>
+      <button id="resetBtn">Reset</button>
+    </div>
+
+    <div id="names">
+      <span id="player1">{to enter}</span>
+      <span>VS</span>
+      <span id="player2">{to enter}</span>
+    </div>
+
+    <div id="status">Status: <span id="statusText">disconnected</span></div>
+    <div id="log"></div>
+
+    <script>
+      const board = {};
+      for (let i = 1; i <= 9; i++) board[i] = "";
+      let ws = null;
+      let player = "X";
+      let players = [];
+
+      const boardEl = document.getElementById("board");
+      const connectBtn = document.getElementById("connectBtn");
+      const resetBtn = document.getElementById("resetBtn");
+      const statusText = document.getElementById("statusText");
+      const log = document.getElementById("log");
+
+      function logMsg(msg) {
+        log.textContent = msg;
+      }
+
+      function renderBoard() {
+        boardEl.innerHTML = "";
+
+        for (let i = 1; i <= 9; i++) {
+          let cls = ["cell"];
+
+          if (board[i] || !ws) cls.push("disabled");
+
+          const cell = document.createElement("div");
+          cell.className = cls.join(" ");
+          cell.dataset.pos = i;
+          cell.textContent = board[i] || "";
+          cell.addEventListener("click", onCellClick);
+          boardEl.appendChild(cell);
+        }
+      }
+
+      function onCellClick(e) {
+        const pos = Number(e.currentTarget.dataset.pos);
+        if (board[pos]) return;
+
+        board[pos] = player;
+        player = player === "X" ? "O" : "X";
+        renderBoard();
+        sendBoard();
+      }
+
+      function sendBoard() {
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+          logMsg("not connected. refresh to connect.");
+          return;
+        }
+
+        ws.send(JSON.stringify(board));
+        logMsg("tabuleiro enviado");
+      }
+
+      function connectWebSocket() {
+        if (ws) {
+          try {
+            ws.close();
+          } catch {
+            console.log("error closing websocket");
+          }
+
+          ws = null;
+        }
+
+        ws = new WebSocket("/gate-ws");
+
+        ws.addEventListener("open", () => {
+          statusText.textContent = "connected";
+          logMsg("websocket open, waiting recognizable faces.");
+        });
+
+        ws.addEventListener("message", (ev) => {
+          try {
+            const data = JSON.parse(ev.data);
+
+            if (data.event === "connect") {
+              players.push(data.player_name)
+
+              if (players.length === 1) {
+                document.getElementById("player1").textContent = players[0]
+                return
+              }
+
+              if (players.length !== 2) {
+                return
+              }
+
+              document.getElementById("player1").textContent = players[0]
+              document.getElementById("player2").textContent = players[1]
+            }
+
+            if (data.finished !== undefined) {
+              if (data.finished) {
+                logMsg("End game. Winner: " + data.winner);
+                statusText.textContent = "Finished";
+              } else {
+                logMsg("Game ongoing");
+              }
+              return;
+            }
+
+            if (data.status) {
+              logMsg(JSON.stringify(data));
+              return;
+            }
+
+            let changed = false;
+            for (let k in data) {
+              if (board[k] !== data[k]) {
+                board[k] = data[k];
+                changed = true;
+              }
+            }
+            if (changed) renderBoard();
+          } catch (e) {
+            console.error("error parsing message", e, ev.data);
+          }
+        });
+
+        ws.addEventListener("close", () => {
+          statusText.textContent = "disconnected";
+          logMsg("websocket closed");
+        });
+
+        ws.addEventListener("error", (err) => {
+          console.error("websocket error", err);
+          logMsg("websocket error");
+        });
+      }
+
+      connectBtn.addEventListener("click", () => {
+        connectWebSocket();
+        connectBtn.classList.add("disabled");
+        renderBoard();
+      });
+
+      resetBtn.addEventListener("click", () => {
+        for (let i = 1; i <= 9; i++) board[i] = "";
+        renderBoard();
+        ws.close();
+        logMsg("resetted board");
+        document.getElementById("player1").textContent = "{to enter}"
+        document.getElementById("player2").textContent = "{to enter}"
+        players = []
+        connectBtn.classList.remove("disabled");
+      });
+
+      renderBoard();
+    </script>
+  </body>
+</html>

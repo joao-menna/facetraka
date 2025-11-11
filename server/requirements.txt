@@ -1,5 +1,5 @@
-black>=25.9.0
 deepface>=0.0.95
 fastapi[standard]>=0.121.1
 python-multipart>=0.0.20
 tf-keras>=2.20.1
+websockets>=15.0.1
